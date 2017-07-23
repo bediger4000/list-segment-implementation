@@ -37,7 +37,9 @@ main(int ac, char **av)
 			case 'a':  /* "all", do not ignore "." prefixed filenames */
 				break;
 			default:
-				wrstr(2, "Bad option\n");
+				wrstr(2, "Bad option: ");
+				wrstr(2, av[i]);
+				wrstr(2, "\n");
 				break;
 			}
 		} else {
@@ -46,7 +48,7 @@ main(int ac, char **av)
 		}
 	}
 
-	if (fnames_idx < ac && ac > 1)
+	if (fnames_idx && fnames_idx < ac && ac > 1)
 	{
 		wrstr(1, "Doing ls on these file:\n");
 		for (;fnames_idx < ac; ++fnames_idx)
