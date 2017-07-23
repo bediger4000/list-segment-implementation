@@ -16,13 +16,11 @@ unsigned int flags = 0;
 #define RECURSIVE_LIST 0x04
 #define REVERSE_SORT   0x08
 
-void 
-
 int
 main(int ac, char **av)
 {
 	int i;
-	int fnames_adx = 0;
+	int fnames_idx = 0;
 
 	for (i = 1; i < ac; ++i)
 	{
@@ -39,13 +37,25 @@ main(int ac, char **av)
 			case 'a':  /* "all", do not ignore "." prefixed filenames */
 				break;
 			default:
-				write(2, "Bad option\n", 11);
+				wrstr(2, "Bad option\n");
 				break;
 			}
 		} else {
-			fnames_idx = ac;
+			fnames_idx = i;
 			break;
 		}
+	}
+
+	if (fnames_idx < ac && ac > 1)
+	{
+		wrstr(1, "Doing ls on these file:\n");
+		for (;fnames_idx < ac; ++fnames_idx)
+		{
+			wrstr(1, av[fnames_idx]);
+			wrstr(1, "\n");
+		}
+	} else {
+		wrstr(1, "Doing ls on current dir\n");
 	}
 
 	return 0;
