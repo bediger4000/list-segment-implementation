@@ -10,10 +10,19 @@
 void wrstr(int fd, char *string);
 int strln(char *str);
 
+unsigned int flags = 0;
+#define LONG_OUTPUT    0x01
+#define ALL_FILENAMES  0x02
+#define RECURSIVE_LIST 0x04
+#define REVERSE_SORT   0x08
+
+void 
+
 int
 main(int ac, char **av)
 {
 	int i;
+	int fnames_adx = 0;
 
 	for (i = 1; i < ac; ++i)
 	{
@@ -33,6 +42,9 @@ main(int ac, char **av)
 				write(2, "Bad option\n", 11);
 				break;
 			}
+		} else {
+			fnames_idx = ac;
+			break;
 		}
 	}
 
