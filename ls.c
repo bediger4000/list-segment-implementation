@@ -7,8 +7,19 @@
 #include <grp.h>       /* getgrgid */
 #include <dirent.h>    /* opendir, readdir, closedir */
 
-void wrstr(int fd, char *string);
-int strln(char *str);
+#ifdef NULL
+#undef NULL
+#endif
+#define NULL ((void*)0)
+
+struct filename_node {
+	char *filename;
+	struct filename_node *next;
+};
+
+int wrstr(int fd, char *string);
+int strln(const char *str);
+char *strdp(const char *string);
 
 unsigned int flags = 0;
 #define LONG_OUTPUT    0x01
@@ -53,7 +64,7 @@ main(int ac, char **av)
 		wrstr(1, "Doing ls on these file:\n");
 		for (;fnames_idx < ac; ++fnames_idx)
 		{
-			wrstr(1, av[fnames_idx]);
+			wrstr(1, strdp(av[fnames_idx]));
 			wrstr(1, "\n");
 		}
 	} else {
@@ -64,7 +75,7 @@ main(int ac, char **av)
 }
 
 int
-strln(char *str)
+strln(const char *str)
 {
 	int i = 0;
 	if (str)
@@ -73,8 +84,35 @@ strln(char *str)
 }
 
 void
+mcpy(char *dst, const char *src, int count)
+{
+	if (dst && src)
+	{
+		int i;
+		for (i = 0; i < count; ++i)
+			dst[i] = src[i];
+	}
+}
+
+int
 wrstr(int fd, char *string)
 {
+	int cc = 0;
 	if (string && fd >= 0)
-		write(fd, string, strln(string));
+		cc = write(fd, string, strln(string));
+	return cc;
+}
+
+char *
+strdp(const char *string)
+{
+	char *dupe = NULL;
+	if (string)
+	{
+		int l = strln(string) + 1;
+		dupe = malloc(l);
+		mcpy(dupe, string, l);
+		
+	}
+	return dupe;
 }
