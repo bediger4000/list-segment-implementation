@@ -14,12 +14,21 @@
 
 struct filename_node {
 	char *filename;
+	struct stat sb;
+	struct filename_node *prev;
 	struct filename_node *next;
 };
 
+struct filename_node *new_node(const char *filename);
+struct filename_node *push_filename(struct filename_node *head, const char *filename);
+void process_filenames(struct filename_node *head);
+int stat_filenames(struct filename_node *head);
+void print_list(struct filename_node *head);
 int wrstr(int fd, char *string);
 int strln(const char *str);
 char *strdp(const char *string);
+struct filename_node *directory_filelist(const char *directory_name);
+int wrnumber(int fd, int number, int base);
 
 unsigned int flags = 0;
 #define LONG_OUTPUT    0x01
@@ -32,6 +41,7 @@ main(int ac, char **av)
 {
 	int i;
 	int fnames_idx = 0;
+	struct filename_node *head = NULL, *list = NULL;
 
 	for (i = 1; i < ac; ++i)
 	{
@@ -40,12 +50,16 @@ main(int ac, char **av)
 			switch (av[i][1])
 			{
 			case 'l':  /* long listing */
+				flags |= LONG_OUTPUT;
 				break;
 			case 'r':  /* reverse sort order */
+				flags |= REVERSE_SORT;
 				break;
 			case 'R':  /* list subdirectories recursively */
+				flags |= RECURSIVE_LIST;
 				break;
 			case 'a':  /* "all", do not ignore "." prefixed filenames */
+				flags |= ALL_FILENAMES;
 				break;
 			default:
 				wrstr(2, "Bad option: ");
@@ -61,14 +75,31 @@ main(int ac, char **av)
 
 	if (fnames_idx && fnames_idx < ac && ac > 1)
 	{
-		wrstr(1, "Doing ls on these file:\n");
-		for (;fnames_idx < ac; ++fnames_idx)
+		for (; fnames_idx < ac; ++fnames_idx)
 		{
-			wrstr(1, strdp(av[fnames_idx]));
-			wrstr(1, "\n");
+			if (av[fnames_idx][0] == '.')
+			{
+				if (flags & ALL_FILENAMES)
+					list = push_filename(list, av[fnames_idx]);
+			} else
+				list = push_filename(list, av[fnames_idx]);
+			if (!head) head = list;
 		}
 	} else {
-		wrstr(1, "Doing ls on current dir\n");
+		list = directory_filelist(".");
+		head = list;
+	}
+
+	process_filenames(head);
+
+	while (list)
+	{
+		struct filename_node *tmp = list->next;
+		free(list->filename);
+		list->filename = NULL;
+		list->prev = list->next = NULL;
+		free(list);
+		list = tmp;
 	}
 
 	return 0;
@@ -103,6 +134,34 @@ wrstr(int fd, char *string)
 	return cc;
 }
 
+int
+wrnumber(int fd, int number, int base)
+{
+	char buf[11];
+	int place = 9;
+
+	buf[10] = '\0';
+
+	if (number < 0)
+	{
+		wrstr(fd, "-");
+		number = -number; /* -2147483648 == -(-2147483648) */
+	}
+
+	if (number == 0)
+	{
+		return wrstr(fd, "0");
+	}
+
+	while (number > 0)
+	{
+		int r = number%10;
+		number /= 10;
+		buf[place--] = r + '0';
+	}
+	return wrstr(fd, &buf[place+1]);
+}
+
 char *
 strdp(const char *string)
 {
@@ -115,4 +174,92 @@ strdp(const char *string)
 		
 	}
 	return dupe;
+}
+
+struct filename_node *
+new_node(const char *filename)
+{
+	struct filename_node *n = malloc(sizeof(*n));
+	n->prev = n->next = NULL;
+	n->filename = strdp(filename);
+	return n;
+}
+
+struct filename_node *
+push_filename(struct filename_node *list, const char *filename)
+{
+	struct filename_node *elem = new_node(filename);
+	if (list && elem)
+	{
+		elem->next = list;
+		list->prev = elem;
+	}
+	return elem;
+}
+
+void
+process_filenames(struct filename_node *head)
+{
+	if (stat_filenames(head))
+		print_list(head);
+}
+
+int
+stat_filenames(struct filename_node *head)
+{
+	int worked = 0;
+	struct filename_node *f;
+	for (f = head; f; f = f->prev)
+	{
+		if (stat(f->filename, &f->sb))
+		{
+			wrstr(2, "Problem with stat(2) of \"");
+			wrstr(2, f->filename);
+			wrstr(2, "\"\n");
+		} else {
+			++worked;
+		}
+	}
+	return worked;
+}
+
+void
+print_list(struct filename_node *head)
+{
+	struct filename_node *f;
+	for (f = head; f; f = f->prev)
+	{
+		wrstr(1, f->filename);
+		wrstr(1, "\t");
+		wrnumber(1, f->sb.st_size, 10);
+		wrstr(1, "\n");
+	}
+}
+
+struct filename_node *
+directory_filelist(const char *directory_name)
+{
+	struct filename_node *list = NULL, *head = NULL;
+
+	if (directory_name)
+	{
+		DIR *dirp = opendir(directory_name);
+		struct dirent *entry;
+
+		while (NULL != (entry = readdir(dirp)))
+		{
+			if (entry->d_name[0] == '.')
+			{
+				if (flags & ALL_FILENAMES)
+					list = push_filename(list, entry->d_name);
+			} else
+				list = push_filename(list, entry->d_name);
+			if (!head) head = list;
+		}
+
+		closedir(dirp);
+		dirp = NULL;
+	}
+
+	return head;
 }
