@@ -13,16 +13,16 @@
 #endif
 #define NULL ((void*)0)
 
+/* Doubly-linked so it can be sorted by filename */
 struct filename_node {
 	char *filename;
 	struct stat sb;
 	struct filename_node *prev;
 	struct filename_node *next;
 };
-
 struct filename_node *new_node(const char *filename);
 struct filename_node *push_filename(struct filename_node *head, const char *filename);
-void process_filenames(struct filename_node *head);
+void process_filenames(struct filename_node **head);
 int stat_filenames(struct filename_node *head);
 void print_list(struct filename_node *head);
 int wrstr(int fd, char *string);
@@ -102,7 +102,7 @@ main(int ac, char **av)
 		head = directory_filelist(".");
 	}
 
-	process_filenames(head);
+	process_filenames(&head);
 
 	while (head)
 	{
@@ -198,24 +198,24 @@ new_node(const char *filename)
 }
 
 struct filename_node *
-push_filename(struct filename_node *list, const char *filename)
+push_filename(struct filename_node *tail, const char *filename)
 {
 	struct filename_node *elem = new_node(filename);
-	if (list && elem)
+	if (tail && elem)
 	{
-		elem->prev = list;
-		list->next = elem;
+		elem->prev = tail;
+		tail->next = elem;
 	}
 	return elem;
 }
 
 void
-process_filenames(struct filename_node *head)
+process_filenames(struct filename_node **head)
 {
-	if (stat_filenames(head))
+	if (stat_filenames(*head))
 	{
-		sort_list(&head);
-		print_list(head);
+		sort_list(head);
+		print_list(*head);
 	}
 }
 
