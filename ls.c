@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>    /* malloc/free */
 #include <unistd.h>    /* write */
 #include <sys/types.h> /* stat, getpwuid, getgrgid, *dir */
@@ -26,9 +27,19 @@ int stat_filenames(struct filename_node *head);
 void print_list(struct filename_node *head);
 int wrstr(int fd, char *string);
 int strln(const char *str);
+int strcm(const char *s1, const char *s2);
 char *strdp(const char *string);
 struct filename_node *directory_filelist(const char *directory_name);
+void sort_list(struct filename_node **head);
 int wrnumber(int fd, int number, int base);
+void print_long_output(struct filename_node *n);
+void print_mode(mode_t st_mode);
+void print_links(nlink_t st_nlink);
+void print_owner(uid_t st_uid);
+void print_owner(uid_t st_uid);
+void print_group(gid_t st_gid);
+void print_timestamp(struct timespec st_atim);
+void print_size(off_t st_size);
 
 unsigned int flags = 0;
 #define LONG_OUTPUT    0x01
@@ -36,12 +47,14 @@ unsigned int flags = 0;
 #define RECURSIVE_LIST 0x04
 #define REVERSE_SORT   0x08
 
+int block_count = 0;
+
 int
 main(int ac, char **av)
 {
 	int i;
 	int fnames_idx = 0;
-	struct filename_node *head = NULL, *list = NULL;
+	struct filename_node *head = NULL, *tail = NULL;
 
 	for (i = 1; i < ac; ++i)
 	{
@@ -80,26 +93,25 @@ main(int ac, char **av)
 			if (av[fnames_idx][0] == '.')
 			{
 				if (flags & ALL_FILENAMES)
-					list = push_filename(list, av[fnames_idx]);
+					tail = push_filename(tail, av[fnames_idx]);
 			} else
-				list = push_filename(list, av[fnames_idx]);
-			if (!head) head = list;
+				tail = push_filename(tail, av[fnames_idx]);
+			if (!head) head = tail;
 		}
 	} else {
-		list = directory_filelist(".");
-		head = list;
+		head = directory_filelist(".");
 	}
 
 	process_filenames(head);
 
-	while (list)
+	while (head)
 	{
-		struct filename_node *tmp = list->next;
-		free(list->filename);
-		list->filename = NULL;
-		list->prev = list->next = NULL;
-		free(list);
-		list = tmp;
+		struct filename_node *tmp = head->next;
+		free(head->filename);
+		head->filename = NULL;
+		head->prev = head->next = NULL;
+		free(head);
+		head = tmp;
 	}
 
 	return 0;
@@ -191,8 +203,8 @@ push_filename(struct filename_node *list, const char *filename)
 	struct filename_node *elem = new_node(filename);
 	if (list && elem)
 	{
-		elem->next = list;
-		list->prev = elem;
+		elem->prev = list;
+		list->next = elem;
 	}
 	return elem;
 }
@@ -201,7 +213,78 @@ void
 process_filenames(struct filename_node *head)
 {
 	if (stat_filenames(head))
+	{
+		sort_list(&head);
 		print_list(head);
+	}
+}
+
+int
+sort_criteria(const char *f1, const char *f2)
+{
+	int r;
+	if (flags & REVERSE_SORT)
+		r = 0 > strcm(f1, f2);
+	else
+		r = 0 < strcm(f1, f2);
+
+	return r;
+}
+
+void
+sort_list(struct filename_node **head)
+{
+	int looping = 1;
+
+	while (looping)
+	{
+		struct filename_node *tmp = *head;
+		looping = 0;
+		
+		while (tmp && tmp->next)
+		{
+			if (sort_criteria(tmp->filename, tmp->next->filename))
+			{
+				struct filename_node *a = tmp;
+				struct filename_node *b = tmp->next;
+				struct filename_node *b_next = b->next;
+				struct filename_node *a_prev = a->prev;
+
+				b->next = a;
+				a->prev = b;
+
+				if (a_prev)
+					a_prev->next = b;
+				b->prev = a_prev;
+
+				if (b_next)
+					b_next->prev = a;
+				a->next = b_next;
+
+				if (a == *head)
+					*head = b;
+
+				looping = 1;
+			}
+			tmp = tmp->next;
+		}
+	}
+}
+
+int
+strcm(const char *s1, const char *s2)
+{
+	int i, r = 0;
+
+	if (!s1 || !s2)
+		return r;
+
+	for (i = 0; s1[i] && s2[i] && r == 0; ++i)
+	{
+		r = s1[i] - s2[i];
+	}
+
+	return r;
 }
 
 int
@@ -209,14 +292,15 @@ stat_filenames(struct filename_node *head)
 {
 	int worked = 0;
 	struct filename_node *f;
-	for (f = head; f; f = f->prev)
+	for (f = head; f; f = f->next)
 	{
-		if (stat(f->filename, &f->sb))
+		if (lstat(f->filename, &f->sb))
 		{
 			wrstr(2, "Problem with stat(2) of \"");
 			wrstr(2, f->filename);
 			wrstr(2, "\"\n");
 		} else {
+			block_count += f->sb.st_blocks;
 			++worked;
 		}
 	}
@@ -227,11 +311,19 @@ void
 print_list(struct filename_node *head)
 {
 	struct filename_node *f;
-	for (f = head; f; f = f->prev)
+	if (flags & LONG_OUTPUT)
 	{
+		wrstr(1, "total ");
+		wrnumber(1, block_count, 10);
+		wrstr(1, "\n");
+	}
+	for (f = head; f; f = f->next)
+	{
+		if (flags & LONG_OUTPUT)
+		{
+			print_long_output(f);
+		}
 		wrstr(1, f->filename);
-		wrstr(1, "\t");
-		wrnumber(1, f->sb.st_size, 10);
 		wrstr(1, "\n");
 	}
 }
@@ -239,7 +331,7 @@ print_list(struct filename_node *head)
 struct filename_node *
 directory_filelist(const char *directory_name)
 {
-	struct filename_node *list = NULL, *head = NULL;
+	struct filename_node *tail = NULL, *head = NULL;
 
 	if (directory_name)
 	{
@@ -251,10 +343,10 @@ directory_filelist(const char *directory_name)
 			if (entry->d_name[0] == '.')
 			{
 				if (flags & ALL_FILENAMES)
-					list = push_filename(list, entry->d_name);
+					tail = push_filename(tail, entry->d_name);
 			} else
-				list = push_filename(list, entry->d_name);
-			if (!head) head = list;
+				tail = push_filename(tail, entry->d_name);
+			if (!head) head = tail;
 		}
 
 		closedir(dirp);
@@ -262,4 +354,61 @@ directory_filelist(const char *directory_name)
 	}
 
 	return head;
+}
+
+void
+print_long_output(struct filename_node *n)
+{
+	print_mode(n->sb.st_mode);
+	print_links(n->sb.st_nlink);
+	print_owner(n->sb.st_uid);
+	print_group(n->sb.st_gid);
+	print_size(n->sb.st_size);
+	print_timestamp(n->sb.st_atim);
+}
+
+void
+print_mode(mode_t st_mode)
+{
+	char *file_type = "-";
+	switch (st_mode & S_IFMT)
+	{
+	case S_IFBLK:  file_type = "b"; break;
+	case S_IFCHR:  file_type = "c"; break;
+	case S_IFDIR:  file_type = "d"; break;
+	case S_IFIFO:  file_type = "p"; break;
+	case S_IFLNK:  file_type = "l"; break;
+	case S_IFSOCK: file_type = "s"; break;
+	}
+	wrstr(1, file_type);
+	wrstr(1, " ");
+}
+
+void
+print_links(nlink_t st_nlink)
+{
+	wrnumber(1, st_nlink, 10);
+	wrstr(1, " ");
+}
+
+void
+print_owner(uid_t st_uid)
+{
+}
+
+void
+print_group(gid_t st_gid)
+{
+}
+
+void
+print_size(off_t st_size)
+{
+	wrnumber(1, st_size, 10);
+	wrstr(1, " ");
+}
+
+void
+print_timestamp(struct timespec st_atim)
+{
 }
