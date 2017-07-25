@@ -381,6 +381,42 @@ print_mode(mode_t st_mode)
 	case S_IFSOCK: file_type = "s"; break;
 	}
 	wrstr(1, file_type);
+	if (st_mode & S_IRUSR)
+		wrstr(1, "r");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IWUSR)
+		wrstr(1, "w");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IXUSR)
+		wrstr(1, "x");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IRGRP)
+		wrstr(1, "r");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IWGRP)
+		wrstr(1, "w");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IXGRP)
+		wrstr(1, "x");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IROTH)
+		wrstr(1, "r");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IWOTH)
+		wrstr(1, "w");
+	else
+		wrstr(1, "-");
+	if (st_mode & S_IXOTH)
+		wrstr(1, "x");
+	else
+		wrstr(1, "-");
 	wrstr(1, " ");
 }
 
@@ -394,11 +430,26 @@ print_links(nlink_t st_nlink)
 void
 print_owner(uid_t st_uid)
 {
+	struct passwd *pw;
+
+	pw = getpwuid(st_uid);
+	if (pw)
+		wrstr(1, pw->pw_name);
+	else
+		wrnumber(1, st_uid, 10);
+	wrstr(1, " ");
 }
 
 void
 print_group(gid_t st_gid)
 {
+	struct group *gr = getgrgid(st_gid);
+
+	if (gr)
+		wrstr(1, gr->gr_name);
+	else
+		wrnumber(1, st_gid, 10);
+	wrstr(1, " ");
 }
 
 void
