@@ -351,6 +351,7 @@ directory_filelist(const char *directory_name)
 
 		closedir(dirp);
 		dirp = NULL;
+		tail = NULL;
 	}
 
 	return head;
@@ -470,4 +471,8 @@ print_size(off_t st_size)
 void
 print_timestamp(struct timespec st_atim)
 {
+	char *ts = ctime(&st_atim.tv_sec);
+	ts[strln(ts)-1] = '\0'; /* stupid. */
+	wrstr(1, ts);
+	wrstr(1, " ");
 }
