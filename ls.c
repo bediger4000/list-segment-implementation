@@ -19,6 +19,8 @@ struct filename_node {
 	struct stat sb;
 	struct filename_node *prev;
 	struct filename_node *next;
+	int directory;
+	int on_command_line;
 };
 struct filename_node *new_node(const char *filename);
 struct filename_node *push_filename(struct filename_node *head, const char *filename);
@@ -31,7 +33,7 @@ int strcm(const char *s1, const char *s2);
 char *strdp(const char *string);
 struct filename_node *directory_filelist(const char *directory_name);
 void sort_list(struct filename_node **head);
-int wrnumber(int fd, int number, int base);
+int wrnumber(int fd, int number);
 void print_long_output(struct filename_node *n);
 void print_mode(mode_t st_mode);
 void print_links(nlink_t st_nlink);
@@ -97,6 +99,7 @@ main(int ac, char **av)
 			} else
 				tail = push_filename(tail, av[fnames_idx]);
 			if (!head) head = tail;
+			tail->on_command_line = 1;
 		}
 	} else {
 		head = directory_filelist(".");
@@ -147,7 +150,7 @@ wrstr(int fd, char *string)
 }
 
 int
-wrnumber(int fd, int number, int base)
+wrnumber(int fd, int number)
 {
 	char buf[11];
 	int place = 9;
@@ -194,6 +197,7 @@ new_node(const char *filename)
 	struct filename_node *n = malloc(sizeof(*n));
 	n->prev = n->next = NULL;
 	n->filename = strdp(filename);
+	n->directory = 0;
 	return n;
 }
 
@@ -302,6 +306,8 @@ stat_filenames(struct filename_node *head)
 		} else {
 			block_count += f->sb.st_blocks;
 			++worked;
+			if ((f->sb.st_mode & S_IFMT) == S_IFDIR)
+				f->directory = 1;
 		}
 	}
 	return worked;
@@ -314,7 +320,7 @@ print_list(struct filename_node *head)
 	if (flags & LONG_OUTPUT)
 	{
 		wrstr(1, "total ");
-		wrnumber(1, block_count, 10);
+		wrnumber(1, block_count);
 		wrstr(1, "\n");
 	}
 	for (f = head; f; f = f->next)
@@ -424,7 +430,7 @@ print_mode(mode_t st_mode)
 void
 print_links(nlink_t st_nlink)
 {
-	wrnumber(1, st_nlink, 10);
+	wrnumber(1, st_nlink);
 	wrstr(1, " ");
 }
 
@@ -437,7 +443,7 @@ print_owner(uid_t st_uid)
 	if (pw)
 		wrstr(1, pw->pw_name);
 	else
-		wrnumber(1, st_uid, 10);
+		wrnumber(1, st_uid);
 	wrstr(1, " ");
 }
 
@@ -449,7 +455,7 @@ print_group(gid_t st_gid)
 	if (gr)
 		wrstr(1, gr->gr_name);
 	else
-		wrnumber(1, st_gid, 10);
+		wrnumber(1, st_gid);
 	wrstr(1, " ");
 }
 
@@ -464,7 +470,7 @@ print_size(off_t st_size)
 		i /= 10;
 	}
 
-	wrnumber(1, st_size, 10);
+	wrnumber(1, st_size);
 	wrstr(1, " ");
 }
 
