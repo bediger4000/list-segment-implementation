@@ -456,28 +456,12 @@ void
 print_size(off_t st_size)
 {
 	/* 2^33  = 8589934592, 10 places */
-	off_t i = 10000000000;
-
-	if (st_size < 10000000000)
+	off_t i  = 10000000000;  /* sizeof(off_t) matters here */
+	while (st_size < i && i > 10)
+	{
 		wrstr(1, " ");
-	if (st_size < 1000000000)
-		wrstr(1, " ");
-	if (st_size < 100000000)
-		wrstr(1, " ");
-	if (st_size < 10000000)
-		wrstr(1, " ");
-	if (st_size < 1000000)
-		wrstr(1, " ");
-	if (st_size < 100000)
-		wrstr(1, " ");
-	if (st_size < 10000)
-		wrstr(1, " ");
-	if (st_size < 1000)
-		wrstr(1, " ");
-	if (st_size < 100)
-		wrstr(1, " ");
-	if (st_size < 10)
-		wrstr(1, " ");
+		i /= 10;
+	}
 
 	wrnumber(1, st_size, 10);
 	wrstr(1, " ");
