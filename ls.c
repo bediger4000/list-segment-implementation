@@ -19,11 +19,13 @@ struct filename_node {
 	struct stat sb;
 	struct filename_node *prev;
 	struct filename_node *next;
+	struct filename_node *contents;
 	int directory;
 	int on_command_line;
 };
 struct filename_node *new_node(const char *filename);
-struct filename_node *push_filename(struct filename_node *head, const char *filename);
+void free_list(struct filename_node **list);
+struct filename_node *push_filename(struct filename_node *head, const char *filename, const char *directoryname);
 void process_filenames(struct filename_node **head);
 int stat_filenames(struct filename_node *head);
 void print_list(struct filename_node *head);
@@ -31,7 +33,7 @@ int wrstr(int fd, char *string);
 int strln(const char *str);
 int strcm(const char *s1, const char *s2);
 char *strdp(const char *string);
-struct filename_node *directory_filelist(const char *directory_name);
+struct filename_node *directory_filelist(const char *directory_name, const char *prefix);
 void sort_list(struct filename_node **head);
 int wrnumber(int fd, int number);
 void print_long_output(struct filename_node *n);
@@ -92,30 +94,17 @@ main(int ac, char **av)
 	{
 		for (; fnames_idx < ac; ++fnames_idx)
 		{
-			if (av[fnames_idx][0] == '.')
-			{
-				if (flags & ALL_FILENAMES)
-					tail = push_filename(tail, av[fnames_idx]);
-			} else
-				tail = push_filename(tail, av[fnames_idx]);
+			tail = push_filename(tail, av[fnames_idx], "");
 			if (!head) head = tail;
 			tail->on_command_line = 1;
 		}
 	} else {
-		head = directory_filelist(".");
+		head = directory_filelist(".", "");
 	}
 
 	process_filenames(&head);
 
-	while (head)
-	{
-		struct filename_node *tmp = head->next;
-		free(head->filename);
-		head->filename = NULL;
-		head->prev = head->next = NULL;
-		free(head);
-		head = tmp;
-	}
+	free_list(&head);
 
 	return 0;
 }
@@ -198,13 +187,31 @@ new_node(const char *filename)
 	n->prev = n->next = NULL;
 	n->filename = strdp(filename);
 	n->directory = 0;
+	n->contents = NULL;
 	return n;
 }
 
 struct filename_node *
-push_filename(struct filename_node *tail, const char *filename)
+push_filename(struct filename_node *tail, const char *filename, const char *directoryname)
 {
-	struct filename_node *elem = new_node(filename);
+	struct filename_node *elem;
+	char *qname;
+	int fnln = strln(filename);
+	int dnln = strln(directoryname);
+
+	if (dnln > 0)
+	{
+		qname = malloc(dnln + 1 + fnln + 1);
+		mcpy(qname, directoryname, dnln);
+		qname[dnln] = '/';
+		mcpy(&qname[dnln+1], filename, fnln);
+		qname[dnln+1+fnln] = '\0';
+	} else {
+		qname = strdp(filename);
+	}
+
+	elem = new_node(qname);
+
 	if (tail && elem)
 	{
 		elem->prev = tail;
@@ -270,6 +277,8 @@ sort_list(struct filename_node **head)
 
 				looping = 1;
 			}
+			if (tmp->contents)
+				sort_list(&(tmp->contents));
 			tmp = tmp->next;
 		}
 	}
@@ -307,7 +316,13 @@ stat_filenames(struct filename_node *head)
 			block_count += f->sb.st_blocks;
 			++worked;
 			if ((f->sb.st_mode & S_IFMT) == S_IFDIR)
-				f->directory = 1;
+			{
+				if (f->on_command_line)
+				{
+					f->contents = directory_filelist(f->filename, f->filename);
+					stat_filenames(f->contents);
+				}
+			}
 		}
 	}
 	return worked;
@@ -329,13 +344,23 @@ print_list(struct filename_node *head)
 		{
 			print_long_output(f);
 		}
-		wrstr(1, f->filename);
-		wrstr(1, "\n");
+		if (f->contents)
+		{
+			if (f->prev || f->next)
+			{
+				wrstr(1, f->filename);
+				wrstr(1, ":\n");
+			}
+			print_list(f->contents);
+		} else {
+			wrstr(1, f->filename);
+			wrstr(1, "\n");
+		}
 	}
 }
 
 struct filename_node *
-directory_filelist(const char *directory_name)
+directory_filelist(const char *directory_name, const char *prefix)
 {
 	struct filename_node *tail = NULL, *head = NULL;
 
@@ -349,9 +374,9 @@ directory_filelist(const char *directory_name)
 			if (entry->d_name[0] == '.')
 			{
 				if (flags & ALL_FILENAMES)
-					tail = push_filename(tail, entry->d_name);
+					tail = push_filename(tail, entry->d_name, prefix);
 			} else
-				tail = push_filename(tail, entry->d_name);
+				tail = push_filename(tail, entry->d_name, prefix);
 			if (!head) head = tail;
 		}
 
@@ -481,4 +506,21 @@ print_timestamp(struct timespec st_atim)
 	ts[strln(ts)-1] = '\0'; /* stupid. */
 	wrstr(1, ts);
 	wrstr(1, " ");
+}
+
+void
+free_list(struct filename_node **node)
+{
+	while (*node)
+	{
+		struct filename_node *tmp = (*node)->next;
+		if ((*node)->contents) free_list(&(*node)->contents);
+		free((*node)->filename);
+		(*node)->filename = NULL;
+		(*node)->prev = (*node)->next = NULL;
+		free(*node);
+		*node = tmp;
+	}
+
+	*node = NULL;
 }
