@@ -20,7 +20,6 @@ struct filename_node {
 	struct filename_node *prev;
 	struct filename_node *next;
 	struct filename_node *contents;
-	int directory;
 	int on_command_line;
 };
 struct filename_node *new_node(const char *filename);
