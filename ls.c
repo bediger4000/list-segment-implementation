@@ -185,7 +185,6 @@ new_node(const char *filename)
 	struct filename_node *n = malloc(sizeof(*n));
 	n->prev = n->next = NULL;
 	n->filename = strdp(filename);
-	n->directory = 0;
 	n->contents = NULL;
 	return n;
 }
